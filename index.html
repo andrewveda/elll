@@ -40,6 +40,7 @@ let mediaRecorder;
 let audioChunks = [];
 let currentQuestion;
 
+// Start recording
 async function startRecording(btn) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -50,30 +51,65 @@ async function startRecording(btn) {
   alert('Recording started. Speak clearly!');
 }
 
+// Stop recording and score
 async function stopRecording(btn) {
   if (!mediaRecorder) return;
   mediaRecorder.stop();
   mediaRecorder.onstop = async () => {
     const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+    
+    // Convert voice to text using Speech-to-Text API (replace with real API)
+    const spokenText = await mockSpeechToText(audioBlob);
+    
+    // Get typed text
     const typedText = currentQuestion.querySelector('textarea').value;
-    const voiceScore = await scoreVoice(typedText, audioBlob);
-    currentQuestion.querySelector('.score').innerText = `Voice Score: ${voiceScore}%`;
-    currentQuestion.dataset.voiceScore = voiceScore;
+    
+    // Compute similarity
+    const similarity = compareText(spokenText, typedText);
+    
+    currentQuestion.querySelector('.score').innerText = 
+        `Voice Score: ${Math.round(similarity*100)}%`;
+    
+    currentQuestion.dataset.voiceScore = Math.round(similarity*100);
     currentQuestion.dataset.audioBlob = audioBlob; // optional save
   };
 }
 
-async function scoreVoice(typedText, audioBlob) {
-  // Convert audio to base64
-  const arrayBuffer = await audioBlob.arrayBuffer();
-  const base64Audio = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-  // Send to your Google Cloud Speech-to-Text API
-  // For demo, we use random score (replace this with API call)
-  const score = Math.floor(Math.random() * 41) + 60; // 60-100%
-  return score;
+// Mock Speech-to-Text (replace with real API call)
+async function mockSpeechToText(audioBlob) {
+  // For demo, just returning typed text with small typos to simulate recognition
+  return currentQuestion.querySelector('textarea').value
+          .replace(/a/g, 'e').replace(/i/g, 'e'); 
 }
 
+// Compare spoken and typed text using edit distance
+function compareText(a, b) {
+  a = a.toLowerCase().trim();
+  b = b.toLowerCase().trim();
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  if (longer.length === 0) return 1.0;
+  return (longer.length - editDistance(longer, shorter)) / longer.length;
+}
+
+// Standard Levenshtein distance
+function editDistance(s1, s2) {
+  const dp = Array(s1.length + 1).fill(null).map(() => Array(s2.length + 1).fill(0));
+  for (let i = 0; i <= s1.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= s2.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      dp[i][j] = Math.min(
+        dp[i-1][j] + 1,
+        dp[i][j-1] + 1,
+        dp[i-1][j-1] + (s1[i-1] === s2[j-1] ? 0 : 1)
+      );
+    }
+  }
+  return dp[s1.length][s2.length];
+}
+
+// Submit all answers
 async function submitAll() {
   const studentName = document.getElementById('studentName').value;
   if (!studentName) { alert('Enter your name!'); return; }
@@ -83,7 +119,7 @@ async function submitAll() {
     voiceScore: q.dataset.voiceScore || 0
   }));
 
-  const res = await fetch('<https://script.google.com/macros/s/AKfycbxA0lRkERWFt2cYfmm04IQioaG4-21k5VFF5CFKP30zyVaJXM5_27PL3v8JIZEweK3u/exec>', {
+  const res = await fetch('https://script.google.com/macros/s/AKfycbxA0lRkERWFt2cYfmm04IQioaG4-21k5VFF5CFKP30zyVaJXM5_27PL3v8JIZEweK3u/exec', {
     method: 'POST',
     body: JSON.stringify({ studentName, questions }),
     headers: { 'Content-Type': 'application/json' }
