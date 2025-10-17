@@ -3,147 +3,169 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voice Practice & Analysis</title>
+<title>Voice Test</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  select, button { margin: 5px 0; padding: 5px; font-size: 16px; }
+  #sentenceBox { margin-top: 10px; font-weight: bold; }
+  #score { margin-top: 10px; font-size: 18px; font-weight: bold; }
+</style>
 </head>
 <body>
-<h2>Voice Practice</h2>
 
-<label for="department">Select Department:</label>
-<select id="department">
-  <option value="">--Choose--</option>
-</select>
+<h2>Department & Register Voice Test</h2>
 
-<label for="regNo">Select Register Number:</label>
-<select id="regNo">
-  <option value="">--Choose--</option>
-</select>
+<label>Department:</label>
+<select id="departmentSelect">
+  <option value="">Select Department</option>
+</select><br>
 
-<p><strong>Sentence to speak:</strong> <span id="sentenceDisplay"></span></p>
+<label>Register Number:</label>
+<select id="regNoSelect">
+  <option value="">Select Register Number</option>
+</select><br>
+
+<div id="sentenceBox"></div>
 
 <button id="startRec">Start Recording</button>
 <button id="stopRec" disabled>Stop Recording</button>
 <button id="playRec" disabled>Play Recording</button>
-<p id="score"></p>
 
-<script src="https://cdn.jsdelivr.net/npm/levenshtein-edit-distance@1.0.0/levenshtein.min.js"></script>
+<div id="score"></div>
+
 <script>
-const sheetId = "1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs";
-const sheetName = "Sheet1"; // Adjust if your sheet name is different
+const data = [
+  {department: "Cyber Security", regNo: "CS101", sentence: "Grit gathers glory, grows greatness and makes grand the game of life"},
+  {department: "Cyber Security", regNo: "CS102", sentence: "Be yourself everyone else is already taken"},
+  {department: "Mechanical", regNo: "ME101", sentence: "Engineering minds build bridges and shape the world"},
+  {department: "Mechanical", regNo: "ME102", sentence: "Innovation comes from persistence and curiosity"}
+];
 
-let sheetData = [];
-let selectedSentence = "";
+const departmentSelect = document.getElementById('departmentSelect');
+const regNoSelect = document.getElementById('regNoSelect');
+const sentenceBox = document.getElementById('sentenceBox');
+const scoreBox = document.getElementById('score');
 
-// Fetch sheet data
-async function fetchSheetData() {
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
-  const res = await fetch(url);
-  const text = await res.text();
-  const json = JSON.parse(text.substring(47, text.length-2));
-  
-  sheetData = json.table.rows.map(r => ({
-    department: r.c[0] ? r.c[0].v : "",
-    regNo: r.c[1] ? r.c[1].v : "",
-    sentence: r.c[2] ? r.c[2].v : ""
-  }));
+let currentSentence = "";
 
-  populateDepartments();
-}
-
-function populateDepartments() {
-  const deptSet = new Set(sheetData.map(d => d.department));
-  const deptSelect = document.getElementById("department");
-  deptSet.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d;
-    opt.text = d;
-    deptSelect.appendChild(opt);
-  });
-}
-
-// Update register numbers when department changes
-document.getElementById("department").addEventListener("change", e => {
-  const dept = e.target.value;
-  const regSelect = document.getElementById("regNo");
-  regSelect.innerHTML = `<option value="">--Choose--</option>`;
-  sheetData.filter(d => d.department === dept).forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d.regNo;
-    opt.text = d.regNo;
-    regSelect.appendChild(opt);
-  });
-  document.getElementById("sentenceDisplay").textContent = "";
-  selectedSentence = "";
+// Populate department dropdown
+const departments = [...new Set(data.map(d => d.department))];
+departments.forEach(dep => {
+  const option = document.createElement('option');
+  option.value = dep;
+  option.textContent = dep;
+  departmentSelect.appendChild(option);
 });
 
-// Update sentence display when regNo changes
-document.getElementById("regNo").addEventListener("change", e => {
-  const dept = document.getElementById("department").value;
-  const reg = e.target.value;
-  const entry = sheetData.find(d => d.department === dept && d.regNo === reg);
-  if(entry) {
-    selectedSentence = entry.sentence;
-    document.getElementById("sentenceDisplay").textContent = selectedSentence;
+// Update register number dropdown when department changes
+departmentSelect.addEventListener('change', () => {
+  const selectedDept = departmentSelect.value;
+  regNoSelect.innerHTML = '<option value="">Select Register Number</option>';
+  const regNos = data.filter(d => d.department === selectedDept);
+  regNos.forEach(r => {
+    const option = document.createElement('option');
+    option.value = r.regNo;
+    option.textContent = r.regNo;
+    regNoSelect.appendChild(option);
+  });
+  sentenceBox.textContent = "";
+  currentSentence = "";
+  scoreBox.textContent = "";
+});
+
+// Show sentence when register number selected
+regNoSelect.addEventListener('change', () => {
+  const selectedReg = regNoSelect.value;
+  const entry = data.find(d => d.regNo === selectedReg);
+  if(entry){
+    currentSentence = entry.sentence;
+    sentenceBox.textContent = currentSentence;
+  } else {
+    currentSentence = "";
+    sentenceBox.textContent = "";
   }
 });
 
-// Audio recording
+// Voice recording setup
 let mediaRecorder;
 let audioChunks = [];
 let audioBlob;
 let audioUrl;
 let audio;
 
-document.getElementById("startRec").addEventListener("click", async () => {
-  if(!selectedSentence) { alert("Select department and register first!"); return; }
+// Speech Recognition setup
+let recognition;
+if('webkitSpeechRecognition' in window){
+  recognition = new webkitSpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = function(event){
+    const transcript = event.results[0][0].transcript;
+    scoreBox.textContent = `You said: "${transcript}"`;
+    const score = levenshteinDistance(transcript.toLowerCase(), currentSentence.toLowerCase());
+    scoreBox.textContent += `\nLevenshtein Distance: ${score} → ${score === 0 ? "Correct ✅" : "Wrong ❌"}`;
+  }
+
+  recognition.onerror = function(event){
+    alert("Speech recognition error: " + event.error);
+  }
+} else {
+  alert("Your browser does not support Web Speech API. Please use Chrome.");
+}
+
+document.getElementById('startRec').addEventListener('click', async () => {
+  if(!currentSentence){
+    alert("Select a department and register number first!");
+    return;
+  }
+
+  // Start MediaRecorder for playback
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
   audioChunks = [];
-  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  mediaRecorder.ondataavailable = e => { audioChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
     audioUrl = URL.createObjectURL(audioBlob);
     audio = new Audio(audioUrl);
-    document.getElementById("playRec").disabled = false;
-    analyseRecording();
+    document.getElementById('playRec').disabled = false;
   };
   mediaRecorder.start();
-  document.getElementById("startRec").disabled = true;
-  document.getElementById("stopRec").disabled = false;
+
+  // Start speech recognition
+  recognition.start();
+
+  document.getElementById('startRec').disabled = true;
+  document.getElementById('stopRec').disabled = false;
 });
 
-document.getElementById("stopRec").addEventListener("click", () => {
+document.getElementById('stopRec').addEventListener('click', () => {
   mediaRecorder.stop();
-  document.getElementById("startRec").disabled = false;
-  document.getElementById("stopRec").disabled = true;
+  recognition.stop();
+  document.getElementById('startRec').disabled = false;
+  document.getElementById('stopRec').disabled = true;
 });
 
-document.getElementById("playRec").addEventListener("click", () => {
+document.getElementById('playRec').addEventListener('click', () => {
   if(audio) audio.play();
 });
 
-// Levenshtein analysis
-async function analyseRecording() {
-  // Use Web Speech API to convert speech to text
-  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  recognition.lang = 'en-US';
-  recognition.interimResults = false;
-
-  recognition.onresult = e => {
-    const userText = e.results[0][0].transcript;
-    const distance = levenshtein(userText.toLowerCase(), selectedSentence.toLowerCase());
-    const maxLen = Math.max(userText.length, selectedSentence.length);
-    const scorePercent = Math.max(0, Math.round((1 - distance/maxLen)*100));
-    document.getElementById("score").textContent = `Your score: ${scorePercent}% (${scorePercent >= 80 ? "Correct" : "Wrong"})`;
-  };
-
-  recognition.onerror = e => {
-    document.getElementById("score").textContent = `Speech recognition error: ${e.error}`;
-  };
-
-  recognition.start();
+// Levenshtein distance function
+function levenshteinDistance(a, b) {
+  const dp = Array(a.length+1).fill().map(()=>Array(b.length+1).fill(0));
+  for(let i=0;i<=a.length;i++) dp[i][0] = i;
+  for(let j=0;j<=b.length;j++) dp[0][j] = j;
+  for(let i=1;i<=a.length;i++){
+    for(let j=1;j<=b.length;j++){
+      if(a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1];
+      else dp[i][j] = 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    }
+  }
+  return dp[a.length][b.length];
 }
-
-fetchSheetData();
 </script>
+
 </body>
 </html>
