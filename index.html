@@ -8,7 +8,7 @@
   body { font-family: Arial, sans-serif; margin: 20px; }
   select, button { margin: 5px 0; padding: 5px; font-size: 16px; }
   #sentenceBox { margin-top: 10px; font-weight: bold; }
-  #score { margin-top: 10px; font-size: 18px; font-weight: bold; }
+  #score { margin-top: 10px; font-size: 18px; font-weight: bold; white-space: pre-line; }
 </style>
 </head>
 <body>
@@ -27,13 +27,13 @@
 
 <div id="sentenceBox"></div>
 
-<button id="startRec">Start Recording</button>
-<button id="stopRec" disabled>Stop Recording</button>
-<button id="playRec" disabled>Play Recording</button>
+<button id="startRec">Start Speaking</button>
+<button id="stopRec" disabled>Stop</button>
 
 <div id="score"></div>
 
 <script>
+// Hardcoded data
 const data = [
   {department: "Cyber Security", regNo: "CS101", sentence: "Grit gathers glory, grows greatness and makes grand the game of life"},
   {department: "Cyber Security", regNo: "CS102", sentence: "Be yourself everyone else is already taken"},
@@ -47,36 +47,34 @@ const sentenceBox = document.getElementById('sentenceBox');
 const scoreBox = document.getElementById('score');
 
 let currentSentence = "";
+let recognition;
 
 // Populate department dropdown
-const departments = [...new Set(data.map(d => d.department))];
-departments.forEach(dep => {
+[...new Set(data.map(d=>d.department))].forEach(dep=>{
   const option = document.createElement('option');
   option.value = dep;
   option.textContent = dep;
   departmentSelect.appendChild(option);
 });
 
-// Update register number dropdown when department changes
-departmentSelect.addEventListener('change', () => {
+// Populate regNo dropdown based on department
+departmentSelect.addEventListener('change', ()=>{
   const selectedDept = departmentSelect.value;
   regNoSelect.innerHTML = '<option value="">Select Register Number</option>';
-  const regNos = data.filter(d => d.department === selectedDept);
-  regNos.forEach(r => {
+  data.filter(d=>d.department===selectedDept).forEach(r=>{
     const option = document.createElement('option');
     option.value = r.regNo;
     option.textContent = r.regNo;
     regNoSelect.appendChild(option);
   });
-  sentenceBox.textContent = "";
   currentSentence = "";
+  sentenceBox.textContent = "";
   scoreBox.textContent = "";
 });
 
-// Show sentence when register number selected
-regNoSelect.addEventListener('change', () => {
+regNoSelect.addEventListener('change', ()=>{
   const selectedReg = regNoSelect.value;
-  const entry = data.find(d => d.regNo === selectedReg);
+  const entry = data.find(d=>d.regNo===selectedReg);
   if(entry){
     currentSentence = entry.sentence;
     sentenceBox.textContent = currentSentence;
@@ -86,81 +84,53 @@ regNoSelect.addEventListener('change', () => {
   }
 });
 
-// Voice recording setup
-let mediaRecorder;
-let audioChunks = [];
-let audioBlob;
-let audioUrl;
-let audio;
-
-// Speech Recognition setup
-let recognition;
-if('webkitSpeechRecognition' in window){
-  recognition = new webkitSpeechRecognition();
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = 'en-US';
-
-  recognition.onresult = function(event){
-    const transcript = event.results[0][0].transcript;
-    scoreBox.textContent = `You said: "${transcript}"`;
-    const score = levenshteinDistance(transcript.toLowerCase(), currentSentence.toLowerCase());
-    scoreBox.textContent += `\nLevenshtein Distance: ${score} → ${score === 0 ? "Correct ✅" : "Wrong ❌"}`;
-  }
-
-  recognition.onerror = function(event){
-    alert("Speech recognition error: " + event.error);
-  }
-} else {
-  alert("Your browser does not support Web Speech API. Please use Chrome.");
-}
-
-document.getElementById('startRec').addEventListener('click', async () => {
+// Setup Web Speech API
+function startRecognition(){
   if(!currentSentence){
     alert("Select a department and register number first!");
     return;
   }
+  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.continuous = false;
 
-  // Start MediaRecorder for playback
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  audioChunks = [];
-  mediaRecorder.ondataavailable = e => { audioChunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-    audioUrl = URL.createObjectURL(audioBlob);
-    audio = new Audio(audioUrl);
-    document.getElementById('playRec').disabled = false;
+  recognition.onresult = (event)=>{
+    const transcript = event.results[0][0].transcript;
+    const distance = levenshteinDistance(transcript.toLowerCase(), currentSentence.toLowerCase());
+    const feedback = distance === 0 ? "Correct ✅" : "Wrong ❌";
+    scoreBox.textContent = `You said: "${transcript}"\nLevenshtein Distance: ${distance}\n${feedback}`;
   };
-  mediaRecorder.start();
 
-  // Start speech recognition
+  recognition.onerror = (event)=>{
+    alert("Error: "+event.error);
+  };
+
+  recognition.onend = ()=>{
+    document.getElementById('startRec').disabled = false;
+    document.getElementById('stopRec').disabled = true;
+  };
+
   recognition.start();
-
   document.getElementById('startRec').disabled = true;
   document.getElementById('stopRec').disabled = false;
-});
+}
 
-document.getElementById('stopRec').addEventListener('click', () => {
-  mediaRecorder.stop();
-  recognition.stop();
-  document.getElementById('startRec').disabled = false;
-  document.getElementById('stopRec').disabled = true;
-});
+document.getElementById('startRec').addEventListener('click', startRecognition);
 
-document.getElementById('playRec').addEventListener('click', () => {
-  if(audio) audio.play();
+document.getElementById('stopRec').addEventListener('click', ()=>{
+  if(recognition) recognition.stop();
 });
-
-// Levenshtein distance function
-function levenshteinDistance(a, b) {
+  
+// Levenshtein distance
+function levenshteinDistance(a,b){
   const dp = Array(a.length+1).fill().map(()=>Array(b.length+1).fill(0));
-  for(let i=0;i<=a.length;i++) dp[i][0] = i;
-  for(let j=0;j<=b.length;j++) dp[0][j] = j;
+  for(let i=0;i<=a.length;i++) dp[i][0]=i;
+  for(let j=0;j<=b.length;j++) dp[0][j]=j;
   for(let i=1;i<=a.length;i++){
     for(let j=1;j<=b.length;j++){
-      if(a[i-1] === b[j-1]) dp[i][j] = dp[i-1][j-1];
-      else dp[i][j] = 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      if(a[i-1]===b[j-1]) dp[i][j]=dp[i-1][j-1];
+      else dp[i][j]=1+Math.min(dp[i-1][j],dp[i][j-1],dp[i-1][j-1]);
     }
   }
   return dp[a.length][b.length];
