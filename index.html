@@ -13,6 +13,7 @@ button:hover { background-color:#6c5fc7; box-shadow:0 0 15px rgba(108,95,199,0.6
 .wrong { background-color: #ff4f6e !important; color:#fff; }
 #sentenceBox { margin-top:1rem; font-weight:bold; }
 .feedback { margin-top:0.5rem; font-size:1rem; }
+audio { margin-top:0.5rem; }
 </style>
 </head>
 <body>
@@ -43,6 +44,7 @@ button:hover { background-color:#6c5fc7; box-shadow:0 0 15px rgba(108,95,199,0.6
   <button id="startRec">🎤 Start Speaking</button>
   <button id="stopRec" disabled>⏹ Stop</button>
   <div class="feedback" id="feedback"></div>
+  <div id="audioControls"></div>
 </div>
 
 <div class="container" id="scoreContainer" style="display:none;">
@@ -64,9 +66,12 @@ const departmentSelect = document.getElementById("departmentSelect");
 const regNoSelect = document.getElementById("regNoSelect");
 const sentenceBox = document.getElementById("sentenceBox");
 const feedback = document.getElementById("feedback");
+const audioControls = document.getElementById("audioControls");
 
 let playerName="", playerDepartment="", playerRegNo="", currentSentence="";
 let similarityScore=0;
+let mediaRecorder;
+let audioChunks = [];
 
 // Populate register numbers based on department
 departmentSelect.addEventListener('change', ()=>{
@@ -96,20 +101,36 @@ function beginQuest(){
   document.getElementById("questContainer").style.display = "block";
 }
 
-// SPEECH RECOGNITION SETUP
+// SPEECH RECOGNITION + MEDIA RECORDER
 const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 recognition.lang="en-GB";
 recognition.interimResults=false;
 
-document.getElementById("startRec").addEventListener("click", ()=>{
+document.getElementById("startRec").addEventListener("click", async ()=>{
+  // reset
+  audioChunks = [];
+  audioControls.innerHTML="";
+  feedback.textContent="🎙️ Listening...";
+  
+  // Start recording
+  const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.start();
+  
+  mediaRecorder.ondataavailable = e => { audioChunks.push(e.data); };
+  mediaRecorder.onstop = ()=>{ createPlaybackAndDownload(); };
+  
+  // Start speech recognition
   recognition.start();
   document.getElementById("startRec").disabled = true;
   document.getElementById("stopRec").disabled = false;
-  feedback.textContent = "🎙️ Listening...";
 });
 
 document.getElementById("stopRec").addEventListener("click", ()=>{
   recognition.stop();
+  mediaRecorder.stop();
+  document.getElementById("startRec").disabled = false;
+  document.getElementById("stopRec").disabled = true;
 });
 
 recognition.onresult = (event)=>{
@@ -122,6 +143,7 @@ recognition.onresult = (event)=>{
     feedback.textContent = `❌ Incorrect (${Math.round(similarityScore*100)}%)`;
     feedback.className="wrong";
   }
+  
   // Show score container
   document.getElementById("questContainer").style.display="none";
   document.getElementById("scoreContainer").style.display="block";
@@ -136,6 +158,28 @@ recognition.onresult = (event)=>{
 recognition.onerror = (event)=>{
   feedback.textContent = `⚠️ Error: ${event.error}`;
 };
+
+// CREATE PLAYBACK AND DOWNLOAD BUTTON
+function createPlaybackAndDownload(){
+  const blob = new Blob(audioChunks, {type:'audio/webm'});
+  const url = URL.createObjectURL(blob);
+  
+  const audioEl = document.createElement('audio');
+  audioEl.controls = true;
+  audioEl.src = url;
+  
+  const downloadBtn = document.createElement('a');
+  downloadBtn.href = url;
+  downloadBtn.download = `${playerName}_${playerRegNo}.webm`;
+  downloadBtn.textContent = "⬇️ Download Recording";
+  downloadBtn.style.display="block";
+  downloadBtn.style.marginTop="0.5rem";
+  downloadBtn.style.color="#00ffff";
+  
+  audioControls.innerHTML="";
+  audioControls.appendChild(audioEl);
+  audioControls.appendChild(downloadBtn);
+}
 
 // SAME SCORING MECHANISM
 function compareText(a,b){ 
@@ -174,6 +218,7 @@ document.getElementById("restartBtn").addEventListener("click", ()=>{
   departmentSelect.value="";
   regNoSelect.innerHTML = '<option value="">-- Select Register Number --</option>';
   feedback.textContent="";
+  audioControls.innerHTML="";
 });
 </script>
 
