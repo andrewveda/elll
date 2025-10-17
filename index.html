@@ -3,152 +3,129 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Department & Register Lookup</title>
+<title>Voice Quest Recorder</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 2rem; }
-  select, button { padding: 0.5rem; margin: 0.5rem 0; }
-  .section { display: none; margin-top: 1rem; }
-  #results { margin-top: 1rem; }
-  .row { margin-bottom: 0.5rem; }
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+label, select, button {
+    margin: 5px 0;
+    display: block;
+}
+#sentenceBox {
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid #ccc;
+    background-color: #f9f9f9;
+}
+button {
+    padding: 8px 15px;
+    cursor: pointer;
+}
 </style>
 </head>
 <body>
 
-<h2>Step 1: Select Department and Register Number</h2>
-<div id="step1" class="section" style="display:block;">
-  <label for="department">Department:</label>
-  <select id="department">
-    <option value="">--Select Department--</option>
-    <option value="Cyber Security">Cyber Security</option>
-    <option value="Mechanical">Mechanical</option>
-  </select>
-  <br><br>
-  <label for="register">Register Number:</label>
-  <select id="register">
-    <option value="">--Select Register Number--</option>
-  </select>
-  <br><br>
-  <button onclick="goToStep2()">Next</button>
-</div>
+<h2>Voice Quest Recorder</h2>
 
-<h2>Sentence from CSV</h2>
-<div id="step2" class="section">
-  <div id="results"></div>
-</div>
+<label for="department">Department:</label>
+<select id="department">
+  <option value="">Select Department</option>
+  <option value="CSE">CSE</option>
+  <option value="ECE">ECE</option>
+</select>
+
+<label for="regno">Register Number:</label>
+<select id="regno">
+  <option value="">Select Register No</option>
+  <option value="101">101</option>
+  <option value="102">102</option>
+</select>
+
+<button id="loadSentence">Load Sentence</button>
+
+<div id="sentenceBox">Your sentence will appear here.</div>
+
+<button id="recordBtn">Start/Stop Recording</button>
+<audio id="playAudio" controls></audio>
 
 <script>
-// Step 1: Hardcoded register numbers
-const registers = {
-  "Cyber Security": [
-    "142225128001","142225128002","142225128003","142225128004","142225128005",
-    "142225128006","142225128007","142225128008","142225128009","142225128010",
-    "142225128011","142225128012","142225128013","142225128014","142225128015",
-    "142225128016","142225128017","142225128018","142225128019","142225128020",
-    "142225128021","142225128022","142225128023","142225128024","142225128025",
-    "142225128026","142225128027","142225128028","142225128029","142225128030",
-    "142225128031","142225128032","142225128033","142225128034","142225128035",
-    "142225128036","142225128037","142225128038","142225128039","142225128040",
-    "142225128041","142225128042","142225128043","142225128044","142225128045",
-    "142225128046","142225128047"
-  ],
-  "Mechanical": [
-    "142225114001","142225114002","142225114003","142225114004","142225114005",
-    "142225114006","142225114007","142225114008","142225114009","142225114010",
-    "142225114011","142225114012","142225114013","142225114014","142225114015",
-    "142225114016","142225114017","142225114018","142225114019","142225114020",
-    "142225114021","142225114022","142225114023","142225114024","142225114025",
-    "142225114026","142225114027","142225114028","142225114029","142225114030",
-    "142225114031","142225114032","142225114033","142225114034","142225114035",
-    "142225114036","142225114037","142225114038","142225114039","142225114040",
-    "142225114041","142225114042","142225114043","142225114044","142225114045",
-    "142225114046","142225114047","142225114048","142225114049","142225114050",
-    "142225114051","142225114052","142225114053","142225114054","142225114055",
-    "142225114056","142225114057"
-  ]
-};
+/* ================= CONFIGURATION ================= */
+const SHEET_ID = '1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs'; // <-- Replace with your Google Sheet ID
+const SHEET_NAME = 'Sheet1';
+const API_KEY = 'YOUR_API_KEY';   // <-- Replace with your Google Sheets API Key
 
-document.getElementById("department").addEventListener("change", function() {
-  const selectedDept = this.value;
-  const regSelect = document.getElementById("register");
-  regSelect.innerHTML = '<option value="">--Select Register Number--</option>';
-  if (selectedDept === "") return;
-  registers[selectedDept].forEach(reg => {
-    const option = document.createElement("option");
-    option.value = reg;
-    option.textContent = reg;
-    regSelect.appendChild(option);
-  });
+/* ================ FETCH GOOGLE SHEET DATA ================ */
+async function fetchSheetData() {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs}/values/${Sheet1}?key=${API_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (!data.values) return [];
+
+    const [header, ...rows] = data.values;
+    return rows.map(row => {
+        let obj = {};
+        header.forEach((col, i) => obj[col] = row[i] || '');
+        return obj;
+    });
+}
+
+/* ================ LOAD SENTENCE BASED ON SELECTION ================ */
+document.getElementById('loadSentence').addEventListener('click', async () => {
+    const dept = document.getElementById('department').value;
+    const regNo = document.getElementById('regno').value;
+
+    if (!dept || !regNo) return alert('Please select both Department and Register Number');
+
+    const sheetData = await fetchSheetData();
+    const record = sheetData.find(r => r.Department === dept && r.RegisterNo === regNo);
+
+    if (record) {
+        document.getElementById('sentenceBox').innerText = record.Sentence || 'No sentence found';
+
+        // If MP3 exists in sheet
+        if (record.MP3File) {
+            const audio = document.getElementById('playAudio');
+            audio.src = record.MP3File;
+            audio.load();
+        } else {
+            document.getElementById('playAudio').src = '';
+        }
+    } else {
+        alert('No sentence found for this selection.');
+        document.getElementById('sentenceBox').innerText = '';
+        document.getElementById('playAudio').src = '';
+    }
 });
 
-async function goToStep2() {
-  const dept = document.getElementById("department").value;
-  const reg = document.getElementById("register").value;
-  if (!dept || !reg) return alert("Please select both department and register number.");
-  
-  document.getElementById("step1").style.display = "none";
-  document.getElementById("step2").style.display = "block";
-  
-  // Fetch CSV and show sentence
-  const data = await fetchCSV();
-  const filtered = data.filter(row => row.Register === reg);
-  const resultsDiv = document.getElementById("results");
-  resultsDiv.innerHTML = "";
-  if (filtered.length === 0) {
-    resultsDiv.innerHTML = `<p>No sentence found for register number "${reg}".</p>`;
-    return;
-  }
-  filtered.forEach(row => {
-    const div = document.createElement("div");
-    div.className = "row";
-    div.textContent = row.Sentence;
-    resultsDiv.appendChild(div);
-  });
-}
+/* ================ VOICE RECORDING ================ */
+let mediaRecorder;
+let audioChunks = [];
 
-// Fetch CSV
-const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSk0bNa_VywdGDc10G-1Yo5xADHqdswc_cDlUQIXLxsFCAuhrCOeOiz3I35HavcqSN_mik35lXvkQGG/pub?gid=0&single=true&output=csv";
-
-async function fetchCSV() {
-  const response = await fetch(csvUrl);
-  const csvText = await response.text();
-  return csvToJSON(csvText);
-}
-
-// CSV to JSON with proper handling of commas inside quotes
-function csvToJSON(csvText) {
-  const lines = csvText.trim().split("\n");
-  const headers = lines[0].split(",").map(h => h.trim());
-  const data = lines.slice(1).map(line => {
-    const values = parseCSVLine(line);
-    const obj = {};
-    headers.forEach((header, i) => obj[header] = values[i]);
-    return obj;
-  });
-  return data;
-}
-
-// Parse CSV line respecting quotes
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"' && (i === 0 || line[i-1] !== '\\')) {
-      inQuotes = !inQuotes;
-      continue;
+document.getElementById('recordBtn').addEventListener('click', async () => {
+    if (!mediaRecorder) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            document.getElementById('playAudio').src = audioUrl;
+            audioChunks = [];
+        };
     }
-    if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
+
+    if (mediaRecorder.state === 'inactive') {
+        mediaRecorder.start();
+        alert('Recording started...');
     } else {
-      current += char;
+        mediaRecorder.stop();
+        alert('Recording stopped.');
     }
-  }
-  result.push(current);
-  return result.map(s => s.trim());
-}
+});
 </script>
+
 </body>
 </html>
