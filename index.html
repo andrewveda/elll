@@ -45,6 +45,7 @@ audio { margin-top:0.5rem; }
   <button id="stopRec" disabled>⏹ Stop</button>
   <div class="feedback" id="feedback"></div>
   <div id="audioControls"></div>
+  <div id="nextBtnContainer"></div> <!-- NEW: Next Button -->
 </div>
 
 <div class="container" id="scoreContainer" style="display:none;">
@@ -144,15 +145,25 @@ recognition.onresult = (event)=>{
     feedback.className="wrong";
   }
   
-  // Show score container
-  document.getElementById("scoreCard").innerHTML=`
-    <p>👤 Player: ${playerName}</p>
-    <p>📊 Accuracy: ${Math.round(similarityScore*100)}%</p>
-    <p>🏷 Department: ${playerDepartment}</p>
-    <p>🔢 Register No: ${playerRegNo}</p>
+  // SHOW NEXT BUTTON
+  feedback.textContent += " Click NEXT to see your score!";
+  const nextBtnContainer = document.getElementById("nextBtnContainer");
+  nextBtnContainer.innerHTML = ""; // clear previous
+  const nextBtn = document.createElement("button");
+  nextBtn.textContent = "➡️ Next";
+  nextBtn.style.marginTop = "1rem";
+  nextBtn.onclick = ()=>{
+    // Show scorecard
+    document.getElementById("scoreCard").innerHTML=`
+      <p>👤 Player: ${playerName}</p>
+      <p>📊 Accuracy: ${Math.round(similarityScore*100)}%</p>
+      <p>🏷 Department: ${playerDepartment}</p>
+      <p>🔢 Register No: ${playerRegNo}</p>
+    `;
     document.getElementById("questContainer").style.display="none";
-  document.getElementById("scoreContainer").style.display="block";
-`;
+    document.getElementById("scoreContainer").style.display="block";
+  };
+  nextBtnContainer.appendChild(nextBtn);
 };
 
 recognition.onerror = (event)=>{
@@ -219,6 +230,7 @@ document.getElementById("restartBtn").addEventListener("click", ()=>{
   regNoSelect.innerHTML = '<option value="">-- Select Register Number --</option>';
   feedback.textContent="";
   audioControls.innerHTML="";
+  document.getElementById("nextBtnContainer").innerHTML="";
 });
 </script>
 
