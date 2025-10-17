@@ -145,14 +145,14 @@ recognition.onresult = (event)=>{
   }
   
   // Show score container
-  document.getElementById("questContainer").style.display="none";
-  document.getElementById("scoreContainer").style.display="block";
   document.getElementById("scoreCard").innerHTML=`
     <p>👤 Player: ${playerName}</p>
     <p>📊 Accuracy: ${Math.round(similarityScore*100)}%</p>
     <p>🏷 Department: ${playerDepartment}</p>
     <p>🔢 Register No: ${playerRegNo}</p>
-  `;
+    document.getElementById("questContainer").style.display="none";
+  document.getElementById("scoreContainer").style.display="block";
+`;
 };
 
 recognition.onerror = (event)=>{
