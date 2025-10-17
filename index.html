@@ -3,129 +3,147 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voice Quest Recorder</title>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-}
-label, select, button {
-    margin: 5px 0;
-    display: block;
-}
-#sentenceBox {
-    margin: 10px 0;
-    padding: 10px;
-    border: 1px solid #ccc;
-    background-color: #f9f9f9;
-}
-button {
-    padding: 8px 15px;
-    cursor: pointer;
-}
-</style>
+<title>Voice Practice & Analysis</title>
 </head>
 <body>
+<h2>Voice Practice</h2>
 
-<h2>Voice Quest Recorder</h2>
-
-<label for="department">Department:</label>
+<label for="department">Select Department:</label>
 <select id="department">
-  <option value="">Select Department</option>
-  <option value="CSE">CSE</option>
-  <option value="ECE">ECE</option>
+  <option value="">--Choose--</option>
 </select>
 
-<label for="regno">Register Number:</label>
-<select id="regno">
-  <option value="">Select Register No</option>
-  <option value="101">101</option>
-  <option value="102">102</option>
+<label for="regNo">Select Register Number:</label>
+<select id="regNo">
+  <option value="">--Choose--</option>
 </select>
 
-<button id="loadSentence">Load Sentence</button>
+<p><strong>Sentence to speak:</strong> <span id="sentenceDisplay"></span></p>
 
-<div id="sentenceBox">Your sentence will appear here.</div>
+<button id="startRec">Start Recording</button>
+<button id="stopRec" disabled>Stop Recording</button>
+<button id="playRec" disabled>Play Recording</button>
+<p id="score"></p>
 
-<button id="recordBtn">Start/Stop Recording</button>
-<audio id="playAudio" controls></audio>
-
+<script src="https://cdn.jsdelivr.net/npm/levenshtein-edit-distance@1.0.0/levenshtein.min.js"></script>
 <script>
-/* ================= CONFIGURATION ================= */
-const SHEET_ID = '1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs'; // <-- Replace with your Google Sheet ID
-const SHEET_NAME = 'Sheet1';
-const API_KEY = 'YOUR_API_KEY';   // <-- Replace with your Google Sheets API Key
+const sheetId = "1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs";
+const sheetName = "Sheet1"; // Adjust if your sheet name is different
 
-/* ================ FETCH GOOGLE SHEET DATA ================ */
+let sheetData = [];
+let selectedSentence = "";
+
+// Fetch sheet data
 async function fetchSheetData() {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${1jHT-VU_4Wx6-_o-bnlyFv-NgLB1LukFee9RZvsdiqxs}/values/${Sheet1}?key=${API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    
-    if (!data.values) return [];
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  const json = JSON.parse(text.substring(47, text.length-2));
+  
+  sheetData = json.table.rows.map(r => ({
+    department: r.c[0] ? r.c[0].v : "",
+    regNo: r.c[1] ? r.c[1].v : "",
+    sentence: r.c[2] ? r.c[2].v : ""
+  }));
 
-    const [header, ...rows] = data.values;
-    return rows.map(row => {
-        let obj = {};
-        header.forEach((col, i) => obj[col] = row[i] || '');
-        return obj;
-    });
+  populateDepartments();
 }
 
-/* ================ LOAD SENTENCE BASED ON SELECTION ================ */
-document.getElementById('loadSentence').addEventListener('click', async () => {
-    const dept = document.getElementById('department').value;
-    const regNo = document.getElementById('regno').value;
+function populateDepartments() {
+  const deptSet = new Set(sheetData.map(d => d.department));
+  const deptSelect = document.getElementById("department");
+  deptSet.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.text = d;
+    deptSelect.appendChild(opt);
+  });
+}
 
-    if (!dept || !regNo) return alert('Please select both Department and Register Number');
-
-    const sheetData = await fetchSheetData();
-    const record = sheetData.find(r => r.Department === dept && r.RegisterNo === regNo);
-
-    if (record) {
-        document.getElementById('sentenceBox').innerText = record.Sentence || 'No sentence found';
-
-        // If MP3 exists in sheet
-        if (record.MP3File) {
-            const audio = document.getElementById('playAudio');
-            audio.src = record.MP3File;
-            audio.load();
-        } else {
-            document.getElementById('playAudio').src = '';
-        }
-    } else {
-        alert('No sentence found for this selection.');
-        document.getElementById('sentenceBox').innerText = '';
-        document.getElementById('playAudio').src = '';
-    }
+// Update register numbers when department changes
+document.getElementById("department").addEventListener("change", e => {
+  const dept = e.target.value;
+  const regSelect = document.getElementById("regNo");
+  regSelect.innerHTML = `<option value="">--Choose--</option>`;
+  sheetData.filter(d => d.department === dept).forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d.regNo;
+    opt.text = d.regNo;
+    regSelect.appendChild(opt);
+  });
+  document.getElementById("sentenceDisplay").textContent = "";
+  selectedSentence = "";
 });
 
-/* ================ VOICE RECORDING ================ */
+// Update sentence display when regNo changes
+document.getElementById("regNo").addEventListener("change", e => {
+  const dept = document.getElementById("department").value;
+  const reg = e.target.value;
+  const entry = sheetData.find(d => d.department === dept && d.regNo === reg);
+  if(entry) {
+    selectedSentence = entry.sentence;
+    document.getElementById("sentenceDisplay").textContent = selectedSentence;
+  }
+});
+
+// Audio recording
 let mediaRecorder;
 let audioChunks = [];
+let audioBlob;
+let audioUrl;
+let audio;
 
-document.getElementById('recordBtn').addEventListener('click', async () => {
-    if (!mediaRecorder) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            document.getElementById('playAudio').src = audioUrl;
-            audioChunks = [];
-        };
-    }
-
-    if (mediaRecorder.state === 'inactive') {
-        mediaRecorder.start();
-        alert('Recording started...');
-    } else {
-        mediaRecorder.stop();
-        alert('Recording stopped.');
-    }
+document.getElementById("startRec").addEventListener("click", async () => {
+  if(!selectedSentence) { alert("Select department and register first!"); return; }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  mediaRecorder = new MediaRecorder(stream);
+  audioChunks = [];
+  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+  mediaRecorder.onstop = () => {
+    audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    audioUrl = URL.createObjectURL(audioBlob);
+    audio = new Audio(audioUrl);
+    document.getElementById("playRec").disabled = false;
+    analyseRecording();
+  };
+  mediaRecorder.start();
+  document.getElementById("startRec").disabled = true;
+  document.getElementById("stopRec").disabled = false;
 });
-</script>
 
+document.getElementById("stopRec").addEventListener("click", () => {
+  mediaRecorder.stop();
+  document.getElementById("startRec").disabled = false;
+  document.getElementById("stopRec").disabled = true;
+});
+
+document.getElementById("playRec").addEventListener("click", () => {
+  if(audio) audio.play();
+});
+
+// Levenshtein analysis
+async function analyseRecording() {
+  // Use Web Speech API to convert speech to text
+  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+
+  recognition.onresult = e => {
+    const userText = e.results[0][0].transcript;
+    const distance = levenshtein(userText.toLowerCase(), selectedSentence.toLowerCase());
+    const maxLen = Math.max(userText.length, selectedSentence.length);
+    const scorePercent = Math.max(0, Math.round((1 - distance/maxLen)*100));
+    document.getElementById("score").textContent = `Your score: ${scorePercent}% (${scorePercent >= 80 ? "Correct" : "Wrong"})`;
+  };
+
+  recognition.onerror = e => {
+    document.getElementById("score").textContent = `Speech recognition error: ${e.error}`;
+  };
+
+  recognition.start();
+}
+
+fetchSheetData();
+</script>
 </body>
 </html>
