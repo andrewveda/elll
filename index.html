@@ -1,134 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Student Voice & Text Submission</title>
-<style>
-body { font-family: Arial, sans-serif; max-width: 900px; margin: auto; padding: 20px; background: #f9f9f9; }
-h1 { text-align: center; }
-.question { background: #fff; padding: 15px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
-textarea { width: 100%; height: 80px; margin-top: 8px; padding: 8px; font-size: 16px; }
-button { padding: 10px 20px; margin-top: 10px; cursor: pointer; }
-.score { font-weight: bold; margin-top: 5px; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fetch CSV by Name</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; }
+    input, button { padding: 0.5rem; margin: 0.5rem 0; }
+    #results { margin-top: 1rem; }
+    .row { margin-bottom: 0.5rem; }
+  </style>
 </head>
 <body>
+  <h2>Search Sentence by Name</h2>
+  <input type="text" id="nameInput" placeholder="Enter name">
+  <button onclick="searchName()">Search</button>
 
-<h1>Student Text & Voice Submission</h1>
-<label>Student Name: <input type="text" id="studentName" placeholder="Enter your name"></label>
+  <div id="results"></div>
 
-<div class="question" data-qid="1">
-  <p><b>Question 1:</b> Describe your favourite book.</p>
-  <textarea placeholder="Type your answer here"></textarea><br>
-  <button onclick="startRecording(this)">Start Recording</button>
-  <button onclick="stopRecording(this)">Stop & Score</button>
-  <div class="score"></div>
-</div>
+  <script>
+    // Published CSV URL
+    const csvUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSk0bNa_VywdGDc10G-1Yo5xADHqdswc_cDlUQIXLxsFCAuhrCOeOiz3I35HavcqSN_mik35lXvkQGG/pub?gid=0&single=true&output=csv";
 
-<div class="question" data-qid="2">
-  <p><b>Question 2:</b> Describe your favourite hobby.</p>
-  <textarea placeholder="Type your answer here"></textarea><br>
-  <button onclick="startRecording(this)">Start Recording</button>
-  <button onclick="stopRecording(this)">Stop & Score</button>
-  <div class="score"></div>
-</div>
-
-<button onclick="submitAll()">Submit All Answers</button>
-
-<script>
-let mediaRecorder;
-let audioChunks = [];
-let currentQuestion;
-
-// Start recording
-async function startRecording(btn) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  audioChunks = [];
-  currentQuestion = btn.closest('.question');
-  mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-  mediaRecorder.start();
-  alert('Recording started. Speak clearly!');
-}
-
-// Stop recording and score
-async function stopRecording(btn) {
-  if (!mediaRecorder) return;
-  mediaRecorder.stop();
-  mediaRecorder.onstop = async () => {
-    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-    
-    // Convert voice to text using Speech-to-Text API (replace with real API)
-    const spokenText = await mockSpeechToText(audioBlob);
-    
-    // Get typed text
-    const typedText = currentQuestion.querySelector('textarea').value;
-    
-    // Compute similarity
-    const similarity = compareText(spokenText, typedText);
-    
-    currentQuestion.querySelector('.score').innerText = 
-        `Voice Score: ${Math.round(similarity*100)}%`;
-    
-    currentQuestion.dataset.voiceScore = Math.round(similarity*100);
-    currentQuestion.dataset.audioBlob = audioBlob; // optional save
-  };
-}
-
-// Mock Speech-to-Text (replace with real API call)
-async function mockSpeechToText(audioBlob) {
-  // For demo, just returning typed text with small typos to simulate recognition
-  return currentQuestion.querySelector('textarea').value
-          .replace(/a/g, 'e').replace(/i/g, 'e'); 
-}
-
-// Compare spoken and typed text using edit distance
-function compareText(a, b) {
-  a = a.toLowerCase().trim();
-  b = b.toLowerCase().trim();
-  const longer = a.length > b.length ? a : b;
-  const shorter = a.length > b.length ? b : a;
-  if (longer.length === 0) return 1.0;
-  return (longer.length - editDistance(longer, shorter)) / longer.length;
-}
-
-// Standard Levenshtein distance
-function editDistance(s1, s2) {
-  const dp = Array(s1.length + 1).fill(null).map(() => Array(s2.length + 1).fill(0));
-  for (let i = 0; i <= s1.length; i++) dp[i][0] = i;
-  for (let j = 0; j <= s2.length; j++) dp[0][j] = j;
-  for (let i = 1; i <= s1.length; i++) {
-    for (let j = 1; j <= s2.length; j++) {
-      dp[i][j] = Math.min(
-        dp[i-1][j] + 1,
-        dp[i][j-1] + 1,
-        dp[i-1][j-1] + (s1[i-1] === s2[j-1] ? 0 : 1)
-      );
+    // Fetch CSV and convert to JSON
+    async function fetchCSV() {
+      const response = await fetch(csvUrl);
+      const csvText = await response.text();
+      return csvToJSON(csvText);
     }
-  }
-  return dp[s1.length][s2.length];
-}
 
-// Submit all answers
-async function submitAll() {
-  const studentName = document.getElementById('studentName').value;
-  if (!studentName) { alert('Enter your name!'); return; }
+    // Convert CSV text to JSON
+    function csvToJSON(csvText) {
+      const lines = csvText.trim().split("\n");
+      const headers = lines[0].split(",").map(h => h.trim());
+      return lines.slice(1).map(line => {
+        const values = line.split(",").map(v => v.trim());
+        const obj = {};
+        headers.forEach((header, i) => obj[header] = values[i]);
+        return obj;
+      });
+    }
 
-  const questions = Array.from(document.querySelectorAll('.question')).map(q => ({
-    typedText: q.querySelector('textarea').value,
-    voiceScore: q.dataset.voiceScore || 0
-  }));
+    // Filter by Name and display
+    async function searchName() {
+      const name = document.getElementById("nameInput").value.trim();
+      if (!name) return alert("Please enter a name.");
 
-  const res = await fetch('https://script.google.com/macros/s/AKfycbxA0lRkERWFt2cYfmm04IQioaG4-21k5VFF5CFKP30zyVaJXM5_27PL3v8JIZEweK3u/exec', {
-    method: 'POST',
-    body: JSON.stringify({ studentName, questions }),
-    headers: { 'Content-Type': 'application/json' }
-  });
+      const data = await fetchCSV();
+      const filtered = data.filter(row => row.Name.toLowerCase() === name.toLowerCase());
 
-  const result = await res.json();
-  if (result.status === 'success') alert('Submission successful!');
-}
-</script>
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.innerHTML = "";
 
+      if (filtered.length === 0) {
+        resultsDiv.innerHTML = `<p>No sentences found for "${name}".</p>`;
+        return;
+      }
+
+      filtered.forEach(row => {
+        const div = document.createElement("div");
+        div.className = "row";
+        div.textContent = row.Sentence;
+        resultsDiv.appendChild(div);
+      });
+    }
+  </script>
 </body>
 </html>
